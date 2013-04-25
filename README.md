@@ -18,7 +18,7 @@ collections, pairs, and scalars are stored.
 
 Note: monocopy depends on `com.datomic/datomic-free`.  To use it in a project that depends on `com.datomic/datomic-pro`, your dependency would be:
 
-``clojure
+```clojure
 [tailrecursion/monocopy "1.0.0" :exclusions [com.datomic/datomic-free]]
 ```
 
