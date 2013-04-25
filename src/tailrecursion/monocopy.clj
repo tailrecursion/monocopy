@@ -258,6 +258,18 @@
 (defmethod hydrate :monocopy.symbol [e]
   (symbol (get e :monocopy.symbol/value)))
 
-(defmethod hydrate :default [e]
-  (let [value-attr (keyword (name (entity-type e)) "value")]
-    (get e value-attr)))
+(defmacro defmethods [name dvals argv & body]
+  `(do ~@(for [dval dvals]
+           `(defmethod ~name ~dval ~argv ~@body))))
+
+(defmethods hydrate [:monocopy.keyword
+                     :monocopy.string
+                     :monocopy.boolean
+                     :monocopy.long
+                     :monocopy.double
+                     :monocopy.instant
+                     :monocopy.uuid
+                     :monocopy.uri
+                     :monocopy.symbol]
+  [e] (let [value-attr (keyword (name (entity-type e)) "value")]
+        (get e value-attr)))
