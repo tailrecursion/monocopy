@@ -10,7 +10,13 @@
   (:require [datomic.api :refer [q db] :as d]))
 
 (def schema
-  [;; scalars
+  [;; housekeeping
+   {:db/ident :monocopy/tag
+    :db/id #db/id [:db.part/db]
+    :db/valueType :db.type/keyword
+    :db/cardinality :db.cardinality/one
+    :db.install/_attribute :db.part/db}
+   ;; scalars
    {:db/ident :monocopy.keyword/value
     :db/id #db/id [:db.part/db]
     :db/valueType :db.type/keyword
@@ -82,7 +88,7 @@
     :db/valueType :db.type/ref
     :db/cardinality :db.cardinality/one
     :db.install/_attribute :db.part/db}
-   ;;maps
+   ;; maps
    {:db/ident :monocopy.map/hashCode
     :db/id #db/id [:db.part/db]
     :db/valueType :db.type/long
@@ -94,7 +100,7 @@
     :db/valueType :db.type/ref
     :db/cardinality :db.cardinality/many
     :db.install/_attribute :db.part/db}
-   ;;vectors
+   ;; vectors
    {:db/ident :monocopy.vector/hashCode
     :db/id #db/id [:db.part/db]
     :db/valueType :db.type/long
@@ -106,7 +112,7 @@
     :db/valueType :db.type/ref
     :db/cardinality :db.cardinality/many
     :db.install/_attribute :db.part/db}
-   ;;lists
+   ;; lists
    {:db/ident :monocopy.list/hashCode
     :db/id #db/id [:db.part/db]
     :db/valueType :db.type/long
@@ -135,141 +141,145 @@
 (defprotocol Hashcons
   (datoms [this pid pattr]))
 
+(defn attr [tag fld]
+  (keyword (str "monocopy." (name tag)) fld))
+
 (defn map->datoms
-  [m type pid pattr]
-  (let [map-id (d/tempid :db.part/user)
-        entries-attr (keyword (name type) "entries")]
+  [m tag pid pattr]
+  (let [map-id (d/tempid :db.part/user)]
     (concat
-     [[:db/add map-id :monocopy.map/hashCode (hash m)]]
-     (mapcat #(datoms % map-id entries-attr) m)
+     [[:db/add map-id :monocopy.map/hashCode (hash m)]
+      [:db/add map-id :monocopy/tag          tag]]
+     (mapcat #(datoms % map-id (attr tag "entries")) m)
      [[:db/add pid pattr map-id]])))
 
 (defn entry->datoms
   [[k v :as entry] pid pattr]
   (let [id (d/tempid :db.part/user)]
     (concat
-     [[:db/add id :monocopy.entry/hashCode (hash entry)]]
+     [[:db/add id :monocopy.entry/hashCode (hash entry)]
+      [:db/add id :monocopy/tag            ::entry]]
      (datoms k id :monocopy.entry/key)
      (datoms v id :monocopy.entry/val)
      [[:db/add pid pattr id]])))
 
-(defn scalar->datoms [v type pid pattr]
-  (let [id (d/tempid :db.part/user)
-        value-attr (keyword (name type) "value")]
-    [[:db/add id value-attr v]
-     [:db/add pid pattr id]]))
+(defn scalar->datoms [v tag pid pattr]
+  (let [id (d/tempid :db.part/user)]
+    [[:db/add id  :monocopy/tag      tag]
+     [:db/add id  (attr tag "value") v]
+     [:db/add pid pattr              id]]))
 
 (extend-protocol Hashcons
   ;; scalars
   clojure.lang.Keyword
   (datoms [this pid pattr]
-    (scalar->datoms this :monocopy.keyword pid pattr))
+    (scalar->datoms this ::keyword pid pattr))
   String
   (datoms [this pid pattr]
-    (scalar->datoms this :monocopy.string pid pattr))
+    (scalar->datoms this ::string pid pattr))
   Boolean
   (datoms [this pid pattr]
-    (scalar->datoms this :monocopy.boolean pid pattr))
+    (scalar->datoms this ::boolean pid pattr))
   Long
   (datoms [this pid pattr]
-    (scalar->datoms this :monocopy.long pid pattr))
+    (scalar->datoms this ::long pid pattr))
   Double
   (datoms [this pid pattr]
-    (scalar->datoms this :monocopy.double pid pattr))
+    (scalar->datoms this ::double pid pattr))
   java.util.Date
   (datoms [this pid pattr]
-    (scalar->datoms this :monocopy.instant pid pattr))
+    (scalar->datoms this ::instant pid pattr))
   java.util.UUID
   (datoms [this pid pattr]
-    (scalar->datoms this :monocopy.uuid pid pattr))
+    (scalar->datoms this ::uuid pid pattr))
   java.net.URI
   (datoms [this pid pattr]
-    (scalar->datoms this :monocopy.uri pid pattr))
+    (scalar->datoms this ::uri pid pattr))
   clojure.lang.Symbol
   (datoms [this pid pattr]
     (let [id (d/tempid :db.part/user)]
-      [[:db/add id :monocopy.symbol/value (str this)]
-       [:db/add pid pattr id]]))
-
+      [[:db/add id  :monocopy.symbol/value (str this)]
+       [:db/add id  :monocopy/tag          ::symbol]
+       [:db/add pid pattr                  id]]))
   ;; collections
   clojure.lang.MapEntry
   (datoms [this pid pattr]
     (entry->datoms this pid pattr))
   clojure.lang.PersistentVector
   (datoms [this pid pattr]
-    (map->datoms (zipmap (range) this) :monocopy.vector pid pattr))
+    (map->datoms (zipmap (range) this) ::vector pid pattr))
   clojure.lang.PersistentList
   (datoms [this pid pattr]
-    (map->datoms (zipmap (range) this) :monocopy.list pid pattr))
+    (map->datoms (zipmap (range) this) ::list pid pattr))
+  clojure.lang.ChunkedCons
+  (datoms [this pid pattr]
+    (map->datoms (zipmap (range) this) ::list pid pattr))
+  clojure.lang.Cons
+  (datoms [this pid pattr]
+    (map->datoms (zipmap (range) this) ::list pid pattr))
   clojure.lang.LazySeq
   (datoms [this pid pattr]
     (datoms (apply list this) pid pattr))
   clojure.lang.PersistentList$EmptyList
   (datoms [this pid pattr]
     (let [id (d/tempid :db.part/user)]
-      [[:db/add id :monocopy.list/hashCode (hash this)]
-       [:db/add pid pattr id]]))
+      [[:db/add id  :monocopy.list/hashCode (hash this)]
+       [:db/add id  :monocopy/tag           ::list]
+       [:db/add pid pattr                   id]]))
   clojure.lang.PersistentArrayMap
   (datoms [this pid pattr]
-    (map->datoms this :monocopy.map pid pattr))
+    (map->datoms this ::map pid pattr))
   clojure.lang.PersistentHashMap
   (datoms [this pid pattr]
-    (map->datoms this :monocopy.map pid pattr))
+    (map->datoms this ::map pid pattr))
   clojure.lang.PersistentHashSet
   (datoms [this pid pattr]
     (let [id (d/tempid :db.part/user)]
       (concat
-       [[:db/add id :monocopy.set/hashCode (hash this)]]
+       [[:db/add id :monocopy.set/hashCode (hash this)]
+        [:db/add id :monocopy/tag          ::set]]
        (mapcat #(datoms % id :monocopy.set/members) this)
        [[:db/add pid pattr id]]))))
 
-(defn entity-type [e]
-  (-> e keys first namespace keyword))
+(defmulti hydrate :monocopy/tag)
 
-(defmulti hydrate entity-type)
+(defn hydrate-maplike [tag e]
+  (reduce #(conj %1 (hydrate %2)) {} (get e (attr tag "entries"))))
 
-(defn hydrate-maplike [type e]
-  (reduce (fn [m entry]
-            (let [[k v] (map (comp hydrate (partial get entry))
-                             [:monocopy.entry/key :monocopy.entry/val])]
-              (assoc m k v)))
-          {}
-          (get e (keyword (name type) "entries"))))
-
-(defmethod hydrate :monocopy.list [e]
-  (->> (hydrate-maplike :monocopy.list e)
+(defmethod hydrate ::list [e]
+  (->> (hydrate-maplike ::list e)
        (sort-by key)
        (map second)
        (apply list)))
 
-(defmethod hydrate :monocopy.vector [e]
-  (->> (hydrate-maplike :monocopy.vector e)
+(defmethod hydrate ::vector [e]
+  (->> (hydrate-maplike ::vector e)
        (sort-by key)
        (mapv second)))
 
-(defmethod hydrate :monocopy.map [e]
-  (hydrate-maplike :monocopy.map e))
+(defmethod hydrate ::entry [e]
+  (mapv #(hydrate (get e %))
+        [:monocopy.entry/key :monocopy.entry/val]))
 
-(defmethod hydrate :monocopy.set [e]
+(defmethod hydrate ::map [e]
+  (hydrate-maplike ::map e))
+
+(defmethod hydrate ::set [e]
   (->> (get e :monocopy.set/members)
        (map hydrate)
        set))
 
-(defmethod hydrate :monocopy.symbol [e]
+(defmethod hydrate ::symbol [e]
   (symbol (get e :monocopy.symbol/value)))
 
-(defmacro defmethods [name dvals argv & body]
-  `(do ~@(for [dval dvals]
-           `(defmethod ~name ~dval ~argv ~@body))))
+(derive ::keyword ::scalar)
+(derive ::string  ::scalar)
+(derive ::boolean ::scalar)
+(derive ::long    ::scalar)
+(derive ::double  ::scalar)
+(derive ::instant ::scalar)
+(derive ::uuid    ::scalar)
+(derive ::uri     ::scalar)
 
-(defmethods hydrate [:monocopy.keyword
-                     :monocopy.string
-                     :monocopy.boolean
-                     :monocopy.long
-                     :monocopy.double
-                     :monocopy.instant
-                     :monocopy.uuid
-                     :monocopy.uri
-                     :monocopy.symbol]
-  [e] (let [value-attr (keyword (name (entity-type e)) "value")]
-        (get e value-attr)))
+(defmethod hydrate ::scalar [e]
+  (get e (attr (:monocopy/tag e) "value")))
