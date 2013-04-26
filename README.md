@@ -13,13 +13,13 @@ collections, pairs, and scalars are stored.
 ### Dependency [![Build Status](https://travis-ci.org/tailrecursion/monocopy.png?branch=master)](https://travis-ci.org/tailrecursion/monocopy)
 
 ```clojure
-[tailrecursion/monocopy "1.0.5"]
+[tailrecursion/monocopy "1.0.6"]
 ```
 
 Note: monocopy depends on `com.datomic/datomic-free`.  To use it in a project that depends on `com.datomic/datomic-pro`, your dependency would be:
 
 ```clojure
-[tailrecursion/monocopy "1.0.5" :exclusions [com.datomic/datomic-free]]
+[tailrecursion/monocopy "1.0.6" :exclusions [com.datomic/datomic-free]]
 ```
 
 ## Example
