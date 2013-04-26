@@ -104,8 +104,8 @@
 (defprotocol Hashcons
   (datoms [this pid pattr]))
 
-(defn attr [tag fld]
-  (keyword (str "monocopy." (name tag)) fld))
+(defn value-attr [tag]
+  (keyword (str "monocopy." (name tag)) "value"))
 
 (defn map->datoms
   [m tag pid pattr]
@@ -128,9 +128,9 @@
 
 (defn scalar->datoms [v tag pid pattr]
   (let [id (d/tempid :db.part/user)]
-    [[:db/add id  :monocopy/tag      tag]
-     [:db/add id  (attr tag "value") v]
-     [:db/add pid pattr              id]]))
+    [[:db/add id  :monocopy/tag    tag]
+     [:db/add id  (value-attr tag) v]
+     [:db/add pid pattr            id]]))
 
 (extend-protocol Hashcons
   ;; scalars
@@ -164,7 +164,7 @@
   nil
   (datoms [this pid pattr]
     (let [id (d/tempid :db.part/user)]
-      [[:db/add id  :monocopy/hashCode (hash nil)]
+      [[:db/add id  :monocopy/hashCode (hash this)]
        [:db/add id  :monocopy/tag      ::nil]
        [:db/add pid pattr              id]]))
   ;; collections
@@ -241,4 +241,4 @@
 (derive ::uri     ::scalar)
 
 (defmethod hydrate ::scalar [e]
-  (get e (attr (:monocopy/tag e) "value")))
+  (get e (value-attr (:monocopy/tag e))))
