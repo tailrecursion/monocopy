@@ -10,6 +10,8 @@ monocopy represents most collections as sets of pairs.  In order to
 make storage and query as efficient as possible, only distinct
 collections, pairs, and scalars are stored.
 
+**Note: hashCodes are the basis for equality in monocopy, which is an oversight and can result in data loss.  I'm working on a fix as of 4/26**
+
 ### Dependency [![Build Status](https://travis-ci.org/tailrecursion/monocopy.png?branch=master)](https://travis-ci.org/tailrecursion/monocopy)
 
 ```clojure
