@@ -104,8 +104,8 @@
                                  [?e1  :monocopy.entry/val     ?v1]
                                  [?v1  :monocopy.long/value    ?age]
                                  [(>= ?age 10)]
-                                 [?map :monocopy.map/entries   ?e1]
-                                 [?p   :root/ref             ?map]]
+                                 [?map :monocopy/entries       ?e1]
+                                 [?p   :root/ref               ?map]]
                                db))]
       (is (= #{{:name "Bob"   :age 38 :favs #{:cheese :butter}}
                {:name "Sally" :age 98 :favs #{:cheese :chocolate}}}

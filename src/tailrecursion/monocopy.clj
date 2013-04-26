@@ -16,6 +16,17 @@
     :db/valueType :db.type/keyword
     :db/cardinality :db.cardinality/one
     :db.install/_attribute :db.part/db}
+   {:db/ident :monocopy/hashCode
+    :db/id #db/id [:db.part/db]
+    :db/valueType :db.type/long
+    :db/cardinality :db.cardinality/one
+    :db/unique :db.unique/identity
+    :db.install/_attribute :db.part/db}
+   {:db/ident :monocopy/entries
+    :db/id #db/id [:db.part/db]
+    :db/valueType :db.type/ref
+    :db/cardinality :db.cardinality/many
+    :db.install/_attribute :db.part/db}
    ;; scalars
    {:db/ident :monocopy.keyword/value
     :db/id #db/id [:db.part/db]
@@ -72,12 +83,6 @@
     :db/unique :db.unique/identity
     :db.install/_attribute :db.part/db}
    ;; entries
-   {:db/ident :monocopy.entry/hashCode
-    :db/id #db/id [:db.part/db]
-    :db/valueType :db.type/long
-    :db/cardinality :db.cardinality/one
-    :db/unique :db.unique/identity
-    :db.install/_attribute :db.part/db}
    {:db/ident :monocopy.entry/key
     :db/id #db/id [:db.part/db]
     :db/valueType :db.type/ref
@@ -88,49 +93,7 @@
     :db/valueType :db.type/ref
     :db/cardinality :db.cardinality/one
     :db.install/_attribute :db.part/db}
-   ;; maps
-   {:db/ident :monocopy.map/hashCode
-    :db/id #db/id [:db.part/db]
-    :db/valueType :db.type/long
-    :db/cardinality :db.cardinality/one
-    :db/unique :db.unique/identity
-    :db.install/_attribute :db.part/db}
-   {:db/ident :monocopy.map/entries
-    :db/id #db/id [:db.part/db]
-    :db/valueType :db.type/ref
-    :db/cardinality :db.cardinality/many
-    :db.install/_attribute :db.part/db}
-   ;; vectors
-   {:db/ident :monocopy.vector/hashCode
-    :db/id #db/id [:db.part/db]
-    :db/valueType :db.type/long
-    :db/cardinality :db.cardinality/one
-    :db/unique :db.unique/identity
-    :db.install/_attribute :db.part/db}
-   {:db/ident :monocopy.vector/entries
-    :db/id #db/id [:db.part/db]
-    :db/valueType :db.type/ref
-    :db/cardinality :db.cardinality/many
-    :db.install/_attribute :db.part/db}
-   ;; lists
-   {:db/ident :monocopy.list/hashCode
-    :db/id #db/id [:db.part/db]
-    :db/valueType :db.type/long
-    :db/cardinality :db.cardinality/one
-    :db/unique :db.unique/identity
-    :db.install/_attribute :db.part/db}
-   {:db/ident :monocopy.list/entries
-    :db/id #db/id [:db.part/db]
-    :db/valueType :db.type/ref
-    :db/cardinality :db.cardinality/many
-    :db.install/_attribute :db.part/db}
    ;; sets
-   {:db/ident :monocopy.set/hashCode
-    :db/id #db/id [:db.part/db]
-    :db/valueType :db.type/long
-    :db/cardinality :db.cardinality/one
-    :db/unique :db.unique/identity
-    :db.install/_attribute :db.part/db}
    {:db/ident :monocopy.set/members
     :db/id #db/id [:db.part/db]
     :db/valueType :db.type/ref
@@ -148,17 +111,17 @@
   [m tag pid pattr]
   (let [map-id (d/tempid :db.part/user)]
     (concat
-     [[:db/add map-id :monocopy.map/hashCode (hash m)]
+     [[:db/add map-id :monocopy/hashCode     (hash m)]
       [:db/add map-id :monocopy/tag          tag]]
-     (mapcat #(datoms % map-id (attr tag "entries")) m)
+     (mapcat #(datoms % map-id :monocopy/entries) m)
      [[:db/add pid pattr map-id]])))
 
 (defn entry->datoms
   [[k v :as entry] pid pattr]
   (let [id (d/tempid :db.part/user)]
     (concat
-     [[:db/add id :monocopy.entry/hashCode (hash entry)]
-      [:db/add id :monocopy/tag            ::entry]]
+     [[:db/add id :monocopy/hashCode (hash entry)]
+      [:db/add id :monocopy/tag      ::entry]]
      (datoms k id :monocopy.entry/key)
      (datoms v id :monocopy.entry/val)
      [[:db/add pid pattr id]])))
@@ -223,9 +186,9 @@
   clojure.lang.PersistentList$EmptyList
   (datoms [this pid pattr]
     (let [id (d/tempid :db.part/user)]
-      [[:db/add id  :monocopy.list/hashCode (hash this)]
-       [:db/add id  :monocopy/tag           ::list]
-       [:db/add pid pattr                   id]]))
+      [[:db/add id  :monocopy/hashCode (hash this)]
+       [:db/add id  :monocopy/tag      ::list]
+       [:db/add pid pattr              id]]))
   clojure.lang.PersistentArrayMap
   (datoms [this pid pattr]
     (map->datoms this ::map pid pattr))
@@ -236,15 +199,15 @@
   (datoms [this pid pattr]
     (let [id (d/tempid :db.part/user)]
       (concat
-       [[:db/add id :monocopy.set/hashCode (hash this)]
-        [:db/add id :monocopy/tag          ::set]]
+       [[:db/add id :monocopy/hashCode (hash this)]
+        [:db/add id :monocopy/tag      ::set]]
        (mapcat #(datoms % id :monocopy.set/members) this)
        [[:db/add pid pattr id]]))))
 
 (defmulti hydrate :monocopy/tag)
 
 (defn hydrate-maplike [tag e]
-  (reduce #(conj %1 (hydrate %2)) {} (get e (attr tag "entries"))))
+  (reduce #(conj %1 (hydrate %2)) {} (get e :monocopy/entries)))
 
 (defmethod hydrate ::list [e]
   (->> (hydrate-maplike ::list e)
