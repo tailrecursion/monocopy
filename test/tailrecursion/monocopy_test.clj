@@ -7,26 +7,27 @@
 ;; You must not remove this notice, or any other, from this software.
 
 (ns tailrecursion.monocopy-test
-  (:require [clojure.test :refer :all]
-            [tailrecursion.monocopy :refer [datoms hydrate] :as mc]
-            [datomic.api :refer [q db] :as d]))
-
-(def ^:dynamic *conn*)
+  (:require [clojure.test             :refer :all]
+            [tailrecursion.monocopy   :refer [datoms hydrate] :as mc]
+            [clojure.data.generators  :as    g]
+            [datomic.api :refer [q db]:as    d]))
 
 (def schema
-  [{:db/ident :person/ref
+  [{:db/ident :root/ref
     :db/id #db/id [:db.part/db]
     :db/valueType :db.type/ref
     :db/cardinality :db.cardinality/one
     :db.install/_attribute :db.part/db}
-   {:db/ident :person/id
+   {:db/ident :root/id
     :db/id #db/id [:db.part/db]
-    :db/valueType :db.type/uuid
+    :db/valueType :db.type/long
     :db/cardinality :db.cardinality/one
-    :db/unique :db.unique/identity
+    :db/unique :db.unique/value
     :db.install/_attribute :db.part/db}])
 
-(defn datomic-fixture [f]
+(def ^:dynamic *conn*)
+
+(defn using-datomic [f]
   (let [uri "datomic:mem://monocopy"]
     (d/delete-database uri)
     (d/create-database uri)
@@ -34,20 +35,65 @@
       (d/transact *conn* (concat mc/schema schema))
       (f))))
 
-(use-fixtures :once datomic-fixture)
+(use-fixtures :each using-datomic)
+
+(defn root [id v]
+  (let [eid (d/tempid :db.part/user)]
+    (concat [[:db/add eid :root/id id]]
+            (datoms v eid :root/ref))))
+
+(def magic-n 1000)
+
+(def supported-scalars
+  [g/long
+   g/double
+   g/boolean
+   g/string
+   g/symbol
+   g/keyword
+   g/uuid
+   g/date])
+
+(def distinct-scalars
+  (distinct (map #(%) (cycle supported-scalars))))
+
+(def repeating-scalars
+  (cycle (map #(%) supported-scalars)))
+
+(deftest scalars
+  (testing "storing scalars"
+    (let [randos (take magic-n distinct-scalars)
+          txes (mapcat root (range) randos)]
+      (d/transact *conn* txes)
+      (let [db (d/db *conn*)
+            n-tags (ffirst (q '[:find (count ?v) :where [?v :monocopy/tag]] db))
+            roots (map (comp (partial d/entity db) first)
+                       (q '[:find ?r :where [?r :root/ref]] db))]
+        (is (= magic-n n-tags))
+        (is (= randos
+               (map (comp hydrate :root/ref) (sort-by :root/id roots))))))))
+
+(deftest scalar-hashing
+  (testing "scalar hashing"
+    (let [repeats (take magic-n repeating-scalars)
+          txes (mapcat root (range) repeats)]
+      (d/transact *conn* txes)
+      (let [db (d/db *conn*)
+            n-tags (ffirst (q '[:find (count ?v) :where [?v :monocopy/tag]] db))
+            n-roots (ffirst (q '[:find (count ?v) :where [?v :root/id]] db))]
+        (assert (> magic-n (count supported-scalars)))
+        (is (= magic-n n-roots))
+        (is (< n-tags n-roots))
+        (is (= (count supported-scalars) n-tags))))))
 
 (deftest age-query
   (let [people [{:name "Joe"   :age 7  :favs #{:cheese}}
                 {:name "Bob"   :age 38 :favs #{:cheese :butter}}
                 {:name "Sally" :age 98 :favs #{:cheese :chocolate}}
                 {:name "Bob"   :age 7  :favs #{:cheese :butter :chocolate}}]]
-    (d/transact *conn*
-                (mapcat #(let [id (d/tempid :db.part/user)]
-                           (concat
-                            [[:db/add id :person/id (java.util.UUID/randomUUID)]]
-                            (datoms % id :person/ref))) people))
+    (d/transact *conn* (mapcat root (range) people))
     (let [db (d/db *conn*)
-          old-people (map (comp #(update-in % [:person/ref] hydrate)
+          old-people (map (comp #(update-in % [:root/ref] hydrate)
                                 (partial into {})
                                 (partial d/entity db)
                                 first)
@@ -59,8 +105,8 @@
                                  [?v1  :monocopy.long/value    ?age]
                                  [(>= ?age 10)]
                                  [?map :monocopy.map/entries   ?e1]
-                                 [?p   :person/ref             ?map]]
+                                 [?p   :root/ref             ?map]]
                                db))]
       (is (= #{{:name "Bob"   :age 38 :favs #{:cheese :butter}}
                {:name "Sally" :age 98 :favs #{:cheese :chocolate}}}
-             (set (map :person/ref old-people)))))))
+             (set (map :root/ref old-people)))))))
