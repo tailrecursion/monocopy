@@ -69,7 +69,7 @@ Note: monocopy depends on `com.datomic/datomic-free`.  To use it in a project th
     [?e1     :monocopy.entry/key     ?k1]
     [?e1     :monocopy.entry/val     ?v1]
     [?v1     :monocopy.string/value  "Bob"]
-    [?map    :monocopy.map/entries   ?e1]
+    [?map    :monocopy/entries       ?e1]
     [?person :person/ref             ?map]])
 
 ;; find people named Bob
