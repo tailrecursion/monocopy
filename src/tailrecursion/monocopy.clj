@@ -111,8 +111,8 @@
   [m tag pid pattr]
   (let [map-id (d/tempid :db.part/user)]
     (concat
-     [[:db/add map-id :monocopy/hashCode     (hash m)]
-      [:db/add map-id :monocopy/tag          tag]]
+     [[:db/add map-id :monocopy/hashCode (hash m)]
+      [:db/add map-id :monocopy/tag      tag]]
      (mapcat #(datoms % map-id :monocopy/entries) m)
      [[:db/add pid pattr map-id]])))
 
@@ -176,10 +176,10 @@
     (map->datoms (zipmap (range) this) ::list pid pattr))
   clojure.lang.ChunkedCons
   (datoms [this pid pattr]
-    (map->datoms (zipmap (range) this) ::list pid pattr))
+    (datoms (apply list this) pid pattr))
   clojure.lang.Cons
   (datoms [this pid pattr]
-    (map->datoms (zipmap (range) this) ::list pid pattr))
+    (datoms (apply list this) pid pattr))
   clojure.lang.LazySeq
   (datoms [this pid pattr]
     (datoms (apply list this) pid pattr))
@@ -206,17 +206,17 @@
 
 (defmulti hydrate :monocopy/tag)
 
-(defn hydrate-maplike [tag e]
+(defn hydrate-map [e]
   (reduce #(conj %1 (hydrate %2)) {} (get e :monocopy/entries)))
 
 (defmethod hydrate ::list [e]
-  (->> (hydrate-maplike ::list e)
+  (->> (hydrate-map e)
        (sort-by key)
        (map second)
        (apply list)))
 
 (defmethod hydrate ::vector [e]
-  (->> (hydrate-maplike ::vector e)
+  (->> (hydrate-map e)
        (sort-by key)
        (mapv second)))
 
@@ -225,7 +225,7 @@
         [:monocopy.entry/key :monocopy.entry/val]))
 
 (defmethod hydrate ::map [e]
-  (hydrate-maplike ::map e))
+  (hydrate-map e))
 
 (defmethod hydrate ::set [e]
   (->> (get e :monocopy.set/members)
