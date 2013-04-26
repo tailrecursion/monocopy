@@ -13,13 +13,13 @@ collections, pairs, and scalars are stored.
 ### Dependency [![Build Status](https://travis-ci.org/tailrecursion/monocopy.png?branch=master)](https://travis-ci.org/tailrecursion/monocopy)
 
 ```clojure
-[tailrecursion/monocopy "1.0.1"]
+[tailrecursion/monocopy "1.0.2"]
 ```
 
 Note: monocopy depends on `com.datomic/datomic-free`.  To use it in a project that depends on `com.datomic/datomic-pro`, your dependency would be:
 
 ```clojure
-[tailrecursion/monocopy "1.0.1" :exclusions [com.datomic/datomic-free]]
+[tailrecursion/monocopy "1.0.2" :exclusions [com.datomic/datomic-free]]
 ```
 
 ## Example
@@ -87,8 +87,8 @@ Note: monocopy depends on `com.datomic/datomic-free`.  To use it in a project th
 
 You can add your own types to monocopy:
 
-1. Implement the `datoms` method of the `tailrecursion.monocopy/Hashcons` protocol for your type.
-1. Implement the `hydrate` multimethod for the kinds of entities you store.
+1. Implement the `datoms` method of the `tailrecursion.monocopy/Hashcons` protocol for your type.  Datoms for your type should have a `:monocopy/tag` attribute of `:db.type/keyword`.
+1. Add a method to `tailrecursion.monocopy/hydrate` for the `:monocopy/tag` value you chose.
 
 ### Misc.
 
