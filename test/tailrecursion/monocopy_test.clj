@@ -45,7 +45,8 @@
 (def magic-n 1000)
 
 (def supported-scalars
-  [g/long
+  [(constantly nil)
+   g/long
    g/double
    g/boolean
    g/string

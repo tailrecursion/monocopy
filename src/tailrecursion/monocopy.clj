@@ -160,10 +160,13 @@
     (scalar->datoms this ::uri pid pattr))
   clojure.lang.Symbol
   (datoms [this pid pattr]
+    (scalar->datoms (str this) ::symbol pid pattr))
+  nil
+  (datoms [this pid pattr]
     (let [id (d/tempid :db.part/user)]
-      [[:db/add id  :monocopy.symbol/value (str this)]
-       [:db/add id  :monocopy/tag          ::symbol]
-       [:db/add pid pattr                  id]]))
+      [[:db/add id  :monocopy/hashCode (hash nil)]
+       [:db/add id  :monocopy/tag      ::nil]
+       [:db/add pid pattr              id]]))
   ;; collections
   clojure.lang.MapEntry
   (datoms [this pid pattr]
@@ -174,15 +177,6 @@
   clojure.lang.PersistentList
   (datoms [this pid pattr]
     (map->datoms (zipmap (range) this) ::list pid pattr))
-  clojure.lang.ChunkedCons
-  (datoms [this pid pattr]
-    (datoms (apply list this) pid pattr))
-  clojure.lang.Cons
-  (datoms [this pid pattr]
-    (datoms (apply list this) pid pattr))
-  clojure.lang.LazySeq
-  (datoms [this pid pattr]
-    (datoms (apply list this) pid pattr))
   clojure.lang.PersistentList$EmptyList
   (datoms [this pid pattr]
     (let [id (d/tempid :db.part/user)]
@@ -234,6 +228,8 @@
 
 (defmethod hydrate ::symbol [e]
   (symbol (get e :monocopy.symbol/value)))
+
+(defmethod hydrate ::nil [e])
 
 (derive ::keyword ::scalar)
 (derive ::string  ::scalar)
