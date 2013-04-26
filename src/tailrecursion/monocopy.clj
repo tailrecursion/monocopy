@@ -201,7 +201,9 @@
 (defmulti hydrate :monocopy/tag)
 
 (defn hydrate-map [e]
-  (reduce #(conj %1 (hydrate %2)) {} (get e :monocopy/entries)))
+  (->> (get e :monocopy/entries)
+       (map hydrate)
+       (into {})))
 
 (defmethod hydrate ::list [e]
   (->> (hydrate-map e)
