@@ -10,18 +10,16 @@ monocopy represents most collections as sets of pairs.  In order to
 make storage and query as efficient as possible, only distinct
 collections, pairs, and scalars are stored.
 
-**Note: hashCodes are the basis for equality in monocopy, which is an oversight and can result in data loss.  I'm working on a fix as of 4/26**
-
 ### Dependency [![Build Status](https://travis-ci.org/tailrecursion/monocopy.png?branch=master)](https://travis-ci.org/tailrecursion/monocopy)
 
 ```clojure
-[tailrecursion/monocopy "1.0.7"]
+[tailrecursion/monocopy "1.0.8"]
 ```
 
-Note: monocopy depends on `com.datomic/datomic-free`.  To use it in a project that depends on `com.datomic/datomic-pro`, your dependency would be:
+monocopy depends on `com.datomic/datomic-free`.  To use it in a project that depends on `com.datomic/datomic-pro`, your dependency would be:
 
 ```clojure
-[tailrecursion/monocopy "1.0.7" :exclusions [com.datomic/datomic-free]]
+[tailrecursion/monocopy "1.0.8" :exclusions [com.datomic/datomic-free]]
 ```
 
 ## Example
@@ -85,21 +83,13 @@ Note: monocopy depends on `com.datomic/datomic-free`.  To use it in a project th
 
 ## Notes
 
-### Adding Types
+monocopy uses the md5 hash of the printed value of collections as
+unique identifiers, so there is a possibility of hash collision and
+data loss.
 
-You can add your own types to monocopy:
-
-1. Implement the `datoms` method of the `tailrecursion.monocopy/Hashcons` protocol for your type.  Datoms for your type should have a `:monocopy/tag` attribute of `:db.type/keyword`.
-1. Add a method to `tailrecursion.monocopy/hydrate` for the `:monocopy/tag` value you chose.
-
-### Misc.
-
-monocopy's approach is inspired by a technique known as [hash
-consing](http://en.wikipedia.org/wiki/Hash_consing). The word
-"monocopy" comes from this paper about hash consing, written by
-[Eiichi Goto](http://en.wikipedia.org/wiki/Eiichi_Goto): [Monocopy and
-Associative Algorithms in an Extended
-Lisp](http://www.cs.utexas.edu/~hunt/research/hash-cons/hash-cons-papers/monocopy-goto.pdf).
+Ultimately, we'd like to implement this [Dynamic Perfect
+Hashing](http://www.arl.wustl.edu/~sailesh/download_files/Limited_Edition/hash/Dynamic%20Perfect%20Hashing-%20Upper%20and%20Lower%20Bounds.pdf)
+scheme and deal with collisions such that data is not lost.
 
 ## License
 

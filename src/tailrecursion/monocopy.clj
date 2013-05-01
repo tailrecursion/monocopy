@@ -7,7 +7,8 @@
 ;; You must not remove this notice, or any other, from this software.
 
 (ns tailrecursion.monocopy
-  (:require [datomic.api :refer [q db] :as d]))
+  (:require [datomic.api :refer [q db] :as d]
+            [clojure.walk :refer [postwalk]]))
 
 (def schema
   [;; housekeeping
@@ -16,9 +17,9 @@
     :db/valueType :db.type/keyword
     :db/cardinality :db.cardinality/one
     :db.install/_attribute :db.part/db}
-   {:db/ident :monocopy/hashCode
+   {:db/ident :monocopy/md5
     :db/id #db/id [:db.part/db]
-    :db/valueType :db.type/long
+    :db/valueType :db.type/string
     :db/cardinality :db.cardinality/one
     :db/unique :db.unique/identity
     :db.install/_attribute :db.part/db}
@@ -107,12 +108,30 @@
 (defn value-attr [tag]
   (keyword (str "monocopy." (name tag)) "value"))
 
+(defn pr-prepare [form]
+  (postwalk #(cond (map? %)
+                   (into (sorted-map) %)
+                   (set? %)
+                   (apply sorted-set %)
+                   :else %)
+            form))
+
+(def MD5 (java.security.MessageDigest/getInstance "MD5"))
+
+(defn md5 [form]
+  (->> form
+       pr-prepare
+       pr-str
+       .getBytes
+       (.digest MD5)
+       org.apache.commons.codec.binary.Base64/encodeBase64String))
+
 (defn map->datoms
   [m tag pid pattr]
   (let [map-id (d/tempid :db.part/user)]
     (concat
-     [[:db/add map-id :monocopy/hashCode (hash m)]
-      [:db/add map-id :monocopy/tag      tag]]
+     [[:db/add map-id :monocopy/md5 (md5 m)]
+      [:db/add map-id :monocopy/tag tag]]
      (mapcat #(datoms % map-id :monocopy/entries) m)
      [[:db/add pid pattr map-id]])))
 
@@ -120,17 +139,17 @@
   [[k v :as entry] pid pattr]
   (let [id (d/tempid :db.part/user)]
     (concat
-     [[:db/add id :monocopy/hashCode (hash entry)]
-      [:db/add id :monocopy/tag      ::entry]]
+     [[:db/add id :monocopy/md5 (md5 entry)]
+      [:db/add id :monocopy/tag ::entry]]
      (datoms k id :monocopy.entry/key)
      (datoms v id :monocopy.entry/val)
      [[:db/add pid pattr id]])))
 
 (defn scalar->datoms [v tag pid pattr]
   (let [id (d/tempid :db.part/user)]
-    [[:db/add id  :monocopy/tag    tag]
-     [:db/add id  (value-attr tag) v]
-     [:db/add pid pattr            id]]))
+    [[:db/add id :monocopy/tag    tag]
+     [:db/add id (value-attr tag) v]
+     [:db/add pid pattr           id]]))
 
 (extend-protocol Hashcons
   ;; scalars
@@ -164,9 +183,9 @@
   nil
   (datoms [this pid pattr]
     (let [id (d/tempid :db.part/user)]
-      [[:db/add id  :monocopy/hashCode (hash this)]
-       [:db/add id  :monocopy/tag      ::nil]
-       [:db/add pid pattr              id]]))
+      [[:db/add id  :monocopy/md5 (md5 this)]
+       [:db/add id  :monocopy/tag ::nil]
+       [:db/add pid pattr         id]]))
   ;; collections
   clojure.lang.MapEntry
   (datoms [this pid pattr]
@@ -180,9 +199,9 @@
   clojure.lang.PersistentList$EmptyList
   (datoms [this pid pattr]
     (let [id (d/tempid :db.part/user)]
-      [[:db/add id  :monocopy/hashCode (hash this)]
-       [:db/add id  :monocopy/tag      ::list]
-       [:db/add pid pattr              id]]))
+      [[:db/add id  :monocopy/md5 (md5 this)]
+       [:db/add id  :monocopy/tag ::list]
+       [:db/add pid pattr         id]]))
   clojure.lang.PersistentArrayMap
   (datoms [this pid pattr]
     (map->datoms this ::map pid pattr))
@@ -193,8 +212,8 @@
   (datoms [this pid pattr]
     (let [id (d/tempid :db.part/user)]
       (concat
-       [[:db/add id :monocopy/hashCode (hash this)]
-        [:db/add id :monocopy/tag      ::set]]
+       [[:db/add id :monocopy/md5 (md5 this)]
+        [:db/add id :monocopy/tag ::set]]
        (mapcat #(datoms % id :monocopy.set/members) this)
        [[:db/add pid pattr id]]))))
 

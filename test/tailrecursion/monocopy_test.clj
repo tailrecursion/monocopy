@@ -84,8 +84,7 @@
             n-roots (ffirst (q '[:find (count ?v) :where [?v :root/id]] db))]
         (assert (> magic-n (count supported-scalars)))
         (is (= magic-n n-roots))
-        (is (< n-tags n-roots))
-        (is (= (count supported-scalars) n-tags))))))
+        (is (< n-tags n-roots))))))
 
 (deftest age-query
   (let [people [{:name "Joe"   :age 7  :favs #{:cheese}}
@@ -111,3 +110,15 @@
       (is (= #{{:name "Bob"   :age 38 :favs #{:cheese :butter}}
                {:name "Sally" :age 98 :favs #{:cheese :chocolate}}}
              (set (map :root/ref old-people)))))))
+
+(deftest maps-interned
+  (let [people [{:name "Joe" :age 7}
+                {:name "Joe" :age 7}]]
+    (d/transact *conn* (mapcat root (range) people))
+    (let [db (d/db *conn*)]
+      (is (= 2 (ffirst (q '[:find (count ?e)
+                            :where
+                            [?e :root/id]] db))))
+      (is (= 1 (ffirst (q '[:find (count ?e)
+                            :where
+                            [?e :monocopy/tag :tailrecursion.monocopy/map]] db)))))))
