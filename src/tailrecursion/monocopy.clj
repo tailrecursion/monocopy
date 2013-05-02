@@ -20,6 +20,7 @@
    {:db/ident :monocopy/md5
     :db/id #db/id [:db.part/db]
     :db/valueType :db.type/string
+    :db/index true
     :db/cardinality :db.cardinality/one
     :db/unique :db.unique/identity
     :db.install/_attribute :db.part/db}
