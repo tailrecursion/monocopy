@@ -7,10 +7,18 @@
 ;; You must not remove this notice, or any other, from this software.
 
 (ns tailrecursion.monocopy-test
-  (:require [clojure.test             :refer :all]
-            [tailrecursion.monocopy   :refer [datoms hydrate] :as mc]
-            [clojure.data.generators  :as    g]
-            [datomic.api :refer [q db]:as    d]))
+  (:require [clojure.test            :refer :all                    ]
+            [clojure.repl            :refer :all                    ]
+            [tailrecursion.monocopy  :refer [datoms hydrate] :as mc ]
+            [datomic.api             :refer [q db          ] :as d  ]
+            [clojure.pprint          :refer [pprint        ]        ]
+            [clojure.data.generators :as    g                       ])
+  (:refer-clojure :exclude [rand-int]))
+
+(defn rand-int
+  "Replacement of core/rand-int that allows control of the
+   randomization basis (through binding clojure.data.generators/*rnd*)."
+  [n] (int (g/uniform 0 n)))
 
 (def schema
   [{:db/ident :root/ref
@@ -37,10 +45,11 @@
 
 (use-fixtures :each using-datomic)
 
-(defn root [id v]
-  (let [eid (d/tempid :db.part/user)]
-    (concat [[:db/add eid :root/id id]]
-            (datoms v eid :root/ref))))
+(let [i (atom 0)]
+  (defn root [v]
+    (let [eid (d/tempid :db.part/user)]
+      (concat [[:db/add eid :root/id (swap! i inc)]]
+              (datoms v eid :root/ref)))))
 
 (def magic-n 1000)
 
@@ -122,3 +131,51 @@
       (is (= 1 (ffirst (q '[:find (count ?e)
                             :where
                             [?e :monocopy/tag :tailrecursion.monocopy/map]] db)))))))
+
+(defn partitions
+  [sizes values]
+  (when-let [[size & more] (seq sizes)]
+    (when (seq values)
+      (lazy-seq (cons (take size values)
+                      (partitions more (drop size values)))))))
+
+(defn randmaps
+  [sizef depthf values]
+  (->> values
+       (partitions (repeatedly sizef))
+       (partitions (repeatedly depthf))
+       (map #(reduce (fn [m [k & rest]]
+                       (assoc (apply hash-map (mapcat identity (partition 2 rest))) k m))
+                     {}
+                     %))))
+
+(comment
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  (do
+    (def uri "datomic:mem://monocopy")
+    (d/delete-database uri)
+    (d/create-database uri)
+    (def conn (d/connect uri))
+    (d/transact conn (concat mc/schema schema)))
+
+  (def maps (take magic-n (randmaps #(inc (rand-int 50)) ;size
+                                    #(inc (rand-int 10))  ;depth
+                                    (map #(%) (repeat g/string)))))
+  
+  (time
+   (doseq [m maps]
+     (d/transact conn (root m))))       ;~27s
+
+  (let [start (. System (nanoTime))
+        p (promise)
+        db (d/db conn)]
+    (future
+      (->> db
+           (q '[:find ?m :where [_ :root/ref ?m]] db)
+           (mapcat identity)
+           (map #(d/entity db %))
+           (mapv hydrate))
+      (deliver p (- (. System (nanoTime)) start)))
+    (println (str "Elapsed: " (/ (double @p) 1000000.0))))
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  )

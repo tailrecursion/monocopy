@@ -1,4 +1,4 @@
-(defproject tailrecursion/monocopy "1.0.9"
+(defproject tailrecursion/monocopy "1.0.10-SNAPSHOT"
   :description "Schema and library for storing Clojure data in Datomic"
   :url "https://github.com/tailrecursion/monocopy"
   :license {:name "Eclipse Public License"
