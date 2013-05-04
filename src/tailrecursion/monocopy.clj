@@ -94,13 +94,6 @@
     :db/id #db/id [:db.part/db]
     :db/valueType :db.type/ref
     :db/cardinality :db.cardinality/one
-    :db.install/_attribute :db.part/db}
-   ;; sets
-   {:db/ident :monocopy.set/members
-    :db/id #db/id [:db.part/db]
-    :db/valueType :db.type/ref
-    :db/cardinality :db.cardinality/many
-    :db/index true
     :db.install/_attribute :db.part/db}])
 
 (defprotocol Hashcons
@@ -117,14 +110,12 @@
                    :else %)
             form))
 
-(def MD5 (java.security.MessageDigest/getInstance "MD5"))
-
 (defn md5 [form]
   (->> form
        pr-prepare
        pr-str
        .getBytes
-       (.digest MD5)
+       (.digest (java.security.MessageDigest/getInstance "MD5"))
        org.apache.commons.codec.binary.Base64/encodeBase64String))
 
 (defn map->datoms
@@ -191,32 +182,12 @@
   clojure.lang.MapEntry
   (datoms [this pid pattr]
     (entry->datoms this pid pattr))
-  clojure.lang.PersistentVector
-  (datoms [this pid pattr]
-    (map->datoms (zipmap (range) this) ::vector pid pattr))
-  clojure.lang.PersistentList
-  (datoms [this pid pattr]
-    (map->datoms (zipmap (range) this) ::list pid pattr))
-  clojure.lang.PersistentList$EmptyList
-  (datoms [this pid pattr]
-    (let [id (d/tempid :db.part/user)]
-      [[:db/add id  :monocopy/md5 (md5 this)]
-       [:db/add id  :monocopy/tag ::list]
-       [:db/add pid pattr         id]]))
   clojure.lang.PersistentArrayMap
   (datoms [this pid pattr]
     (map->datoms this ::map pid pattr))
   clojure.lang.PersistentHashMap
   (datoms [this pid pattr]
-    (map->datoms this ::map pid pattr))
-  clojure.lang.PersistentHashSet
-  (datoms [this pid pattr]
-    (let [id (d/tempid :db.part/user)]
-      (concat
-       [[:db/add id :monocopy/md5 (md5 this)]
-        [:db/add id :monocopy/tag ::set]]
-       (mapcat #(datoms % id :monocopy.set/members) this)
-       [[:db/add pid pattr id]]))))
+    (map->datoms this ::map pid pattr)))
 
 (defmulti hydrate :monocopy/tag)
 
@@ -225,28 +196,12 @@
        (map hydrate)
        (into {})))
 
-(defmethod hydrate ::list [e]
-  (->> (hydrate-map e)
-       (sort-by key)
-       (map second)
-       (apply list)))
-
-(defmethod hydrate ::vector [e]
-  (->> (hydrate-map e)
-       (sort-by key)
-       (mapv second)))
-
 (defmethod hydrate ::entry [e]
   (mapv #(hydrate (get e %))
         [:monocopy.entry/key :monocopy.entry/val]))
 
 (defmethod hydrate ::map [e]
   (hydrate-map e))
-
-(defmethod hydrate ::set [e]
-  (->> (get e :monocopy.set/members)
-       (map hydrate)
-       set))
 
 (defmethod hydrate ::symbol [e]
   (symbol (get e :monocopy.symbol/value)))
