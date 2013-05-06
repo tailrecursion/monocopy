@@ -102,17 +102,8 @@
 (defn value-attr [tag]
   (keyword (str "monocopy." (name tag)) "value"))
 
-(defn pr-prepare [form]
-  (postwalk #(cond (map? %)
-                   (into (sorted-map) %)
-                   (set? %)
-                   (apply sorted-set %)
-                   :else %)
-            form))
-
 (defn md5 [form]
   (->> form
-       pr-prepare
        pr-str
        .getBytes
        (.digest (java.security.MessageDigest/getInstance "MD5"))

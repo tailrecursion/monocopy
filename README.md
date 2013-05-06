@@ -4,11 +4,11 @@ monocopy is a library and schema for efficiently storing many Clojure
 value types in a [Datomic](http://www.datomic.com/) database.
 
 Supported types include strings, symbols, keywords, doubles, longs,
-sets, maps, lists, and vectors.
+and maps.
 
-monocopy represents most collections as sets of pairs.  In order to
-make storage and query as efficient as possible, only distinct
-collections, pairs, and scalars are stored.
+monocopy represents maps as sets of pairs.  In order to make storage
+and query as efficient as possible, only distinct maps, pairs, and
+scalars are stored.
 
 ### Dependency [![Build Status](https://travis-ci.org/tailrecursion/monocopy.png?branch=master)](https://travis-ci.org/tailrecursion/monocopy)
 
