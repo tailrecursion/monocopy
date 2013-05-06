@@ -57,8 +57,13 @@
    g/uuid
    g/date])
 
+(defn cycle-shuffle [coll]
+  (lazy-seq
+   (when-let [s (seq coll)]
+     (concat (g/shuffle s) (cycle-shuffle s)))))
+
 (def scalars-seq
-  (map #(%) (mapcat identity (repeatedly #(g/shuffle supported-scalars)))))
+  (map #(%) (cycle-shuffle supported-scalars)))
 
 (defn randmaps [src]
   (map (partial apply hash-map) (partition 10 src)))
