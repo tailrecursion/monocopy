@@ -58,7 +58,7 @@
    g/date])
 
 (def scalars-seq
-  (cycle (map #(%) supported-scalars)))
+  (map #(%) (mapcat identity (repeatedly #(g/shuffle supported-scalars)))))
 
 (defn randmaps [src]
   (map (partial apply hash-map) (partition 10 src)))
