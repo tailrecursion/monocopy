@@ -6,4 +6,5 @@
   :dependencies [[org.clojure/clojure "1.5.1"]
                  [com.datomic/datomic-free "0.8.3889"]
                  [commons-codec "1.7"]
-                 [org.clojure/data.generators "0.1.2" :scope "test"]])
+                 [org.clojure/data.generators "0.1.2" :scope "test"]]
+  :main ^:skip-aot tailrecursion.monocopy-test/bench)

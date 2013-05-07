@@ -28,23 +28,20 @@
     :db.install/_attribute :db.part/db}])
 
 (def ^:dynamic *conn*)
+(def ^:dynamic *magic* 1000)
 
-(defn datomically [f]
-  (let [uri "datomic:mem://monocopy"]
-    (d/delete-database uri)
-    (d/create-database uri)
-    (binding [*conn* (d/connect uri)]
-      (d/transact *conn* (concat mc/schema test-schema))
-      (f))))
-
-(use-fixtures :each datomically)
+(use-fixtures :each (fn [f]
+                      (let [test-uri "datomic:mem://monocopy"]
+                        (d/delete-database test-uri)
+                        (d/create-database test-uri)
+                        (binding [*conn* (d/connect test-uri)]
+                          (d/transact *conn* (concat mc/schema test-schema))
+                          (f)))))
 
 (defn root [v]
   (let [eid (d/tempid :db.part/user)]
     (concat [[:db/add eid :root/id (java.util.UUID/randomUUID)]]
             (datoms v eid :root/ref))))
-
-(def magic-n 1000)
 
 (def supported-scalars
   [(constantly nil)
@@ -69,7 +66,7 @@
   (map (partial apply hash-map) (partition 10 src)))
 
 (deftest par-map-insertion
-  (let [maps (vec (take magic-n (randmaps scalars-seq)))
+  (let [maps (vec (take *magic* (randmaps scalars-seq)))
         txes (pmap (comp #(d/transact-async *conn* %) root) maps)]
     (doseq [tx txes] (deref tx))
     (let [db (d/db *conn*)
@@ -87,3 +84,53 @@
                 n-disti
                 n-entri))))))
 
+(deftest map-hydration
+  (let [maps (take *magic* (randmaps scalars-seq))]
+    (d/transact *conn* (mapcat root maps))
+    (let [db (d/db *conn*)
+          eids (mapcat identity (q '[:find ?ref :where [_ :root/ref ?ref]] db))]
+      (is (= (set maps)
+             (set (map (comp hydrate #(d/entity db %)) eids)))))))
+
+;;; perf:
+;;; lein run :uri "datomic:mem://monocopy" :magic 5000 :iters 10
+
+(defmacro dotimed [[binding n] & body]
+  `(mapv (fn [i#]
+           (let [~binding i#
+                 start# (System/nanoTime)
+                 ret# (do ~@body)]
+             (/ (double (- (System/nanoTime) start#)) 1000000.0)))
+         (range ~n)))
+
+(defn ^:perf map-insertion-perf [iters]
+  (let [maps (take *magic* (randmaps scalars-seq))]
+    (dotimed [_ iters]
+             (d/transact *conn* (mapcat root maps)))))
+
+(defn ^:perf map-hydration-perf [iters]
+  (let [maps (take *magic* (randmaps scalars-seq))]
+    (d/transact *conn* (mapcat root maps))
+    (let [db (d/db *conn*)]
+      (dotimed [_ iters]
+               (let [eids (mapcat identity (q '[:find ?ref :where [_ :root/ref ?ref]] db))]
+                 (mapv (comp hydrate #(d/entity db %)) eids))))))
+
+(defn benchf [magic uri iters f]
+  (d/delete-database uri)
+  (d/create-database uri)
+  (binding [*magic* magic
+            *conn* (d/connect uri)]
+    (d/transact *conn* (concat mc/schema test-schema))
+    (f iters)))
+
+(defn bench
+  [& {:keys [magic uri iters]
+      :or {magic 1000, uri "datomic:mem://monocopy", iters 5}}]
+  (let [perfns  (->> (ns-publics (the-ns 'tailrecursion.monocopy-test))
+                     (filter (comp :perf meta second)))
+        focused (seq (filter (comp :focus meta second) perfns))]
+    (->> (or focused perfns)
+         (map (fn [[name f]] [name (benchf magic uri iters f)]))
+         (into {})
+         pprint)))
