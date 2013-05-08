@@ -97,6 +97,7 @@
     :db.install/_attribute :db.part/db}])
 
 (defprotocol Hashcons
+  (tag [this])
   (datoms [this pid pattr]))
 
 (defn value-attr [tag]
@@ -122,8 +123,8 @@
   [[k v :as entry] pid pattr]
   (let [id (d/tempid :db.part/user)]
     (concat
-     [[:db/add id :monocopy/md5 (md5 entry)]
-      [:db/add id :monocopy/tag ::entry]]
+     [[:db/add id :monocopy/tag ::entry]
+      [:db/add id :monocopy/md5 (md5 entry)]]
      (datoms k id :monocopy.entry/key)
      (datoms v id :monocopy.entry/val)
      [[:db/add pid pattr id]])))
@@ -137,62 +138,96 @@
 (extend-protocol Hashcons
   ;; scalars
   clojure.lang.Keyword
+  (tag [_] ::keyword)
   (datoms [this pid pattr]
-    (scalar->datoms this ::keyword pid pattr))
+    (scalar->datoms this (tag this) pid pattr))
   String
+  (tag [_] ::string)
   (datoms [this pid pattr]
-    (scalar->datoms this ::string pid pattr))
+    (scalar->datoms this (tag this) pid pattr))
   Boolean
+  (tag [_] ::boolean)
   (datoms [this pid pattr]
-    (scalar->datoms this ::boolean pid pattr))
+    (scalar->datoms this (tag this) pid pattr))
   Long
+  (tag [_] ::long)
   (datoms [this pid pattr]
-    (scalar->datoms this ::long pid pattr))
+    (scalar->datoms this (tag this) pid pattr))
   Double
+  (tag [_] ::double)
   (datoms [this pid pattr]
-    (scalar->datoms this ::double pid pattr))
+    (scalar->datoms this (tag this) pid pattr))
   java.util.Date
+  (tag [_] ::instant)
   (datoms [this pid pattr]
-    (scalar->datoms this ::instant pid pattr))
+    (scalar->datoms this (tag this) pid pattr))
   java.util.UUID
+  (tag [_] ::uuid)
   (datoms [this pid pattr]
-    (scalar->datoms this ::uuid pid pattr))
+    (scalar->datoms this (tag this) pid pattr))
   java.net.URI
+  (tag [_] ::uri)
   (datoms [this pid pattr]
-    (scalar->datoms this ::uri pid pattr))
+    (scalar->datoms this (tag this) pid pattr))
   clojure.lang.Symbol
+  (tag [_] ::symbol)
   (datoms [this pid pattr]
-    (scalar->datoms (str this) ::symbol pid pattr))
+    (scalar->datoms (str this) (tag this) pid pattr))
   nil
+  (tag [_] ::nil)
   (datoms [this pid pattr]
     (let [id (d/tempid :db.part/user)]
       [[:db/add id  :monocopy/md5 (md5 this)]
-       [:db/add id  :monocopy/tag ::nil]
+       [:db/add id  :monocopy/tag (tag this)]
        [:db/add pid pattr         id]]))
   ;; collections
   clojure.lang.MapEntry
+  (tag [_] ::entry)
   (datoms [this pid pattr]
     (entry->datoms this pid pattr))
   clojure.lang.PersistentArrayMap
+  (tag [_] ::map)
   (datoms [this pid pattr]
-    (map->datoms this ::map pid pattr))
+    (map->datoms this (tag this) pid pattr))
   clojure.lang.PersistentHashMap
+  (tag [_] ::map)
   (datoms [this pid pattr]
-    (map->datoms this ::map pid pattr)))
+    (map->datoms this (tag this) pid pattr)))
+
+;;; hydrate
 
 (defmulti hydrate :monocopy/tag)
 
-(defn hydrate-map [e]
-  (->> (get e :monocopy/entries)
-       (map hydrate)
-       (into {})))
-
-(defmethod hydrate ::entry [e]
-  (mapv #(hydrate (get e %))
-        [:monocopy.entry/key :monocopy.entry/val]))
+(deftype LazyMap [db e]
+  clojure.lang.ILookup
+  (valAt [this k]
+    (.valAt this k nil))
+  (valAt [this k not-found]
+    (if-let [vid (ffirst (q '{:find  [?v]
+                              :in    [$ ?vattr ?k ?m]
+                              :where [[?key ?vattr              ?k]
+                                      [?e   :monocopy.entry/key ?key]
+                                      [?m   :monocopy/entries   ?e]
+                                      [?e   :monocopy.entry/val ?v]]}
+                            db (-> k tag value-attr) k (:db/id e)))]
+      (hydrate (d/entity db vid))
+      not-found))
+  clojure.lang.IPersistentCollection
+  (count [_]
+    (count (get e :monocopy/entries)))
+  (equiv [_ o]
+    (and (isa? (class o) LazyMap)
+         (= db (.-db o))
+         (= (:db/id e) (:db/id (.-e o)))))
+  clojure.lang.Seqable
+  (seq [_]
+    (->> (get e :monocopy/entries)
+         (map (fn [entry]
+                (mapv (comp hydrate (partial get entry))
+                      [:monocopy.entry/key :monocopy.entry/val]))))))
 
 (defmethod hydrate ::map [e]
-  (hydrate-map e))
+  (LazyMap. (d/entity-db e) e))
 
 (defmethod hydrate ::symbol [e]
   (symbol (get e :monocopy.symbol/value)))

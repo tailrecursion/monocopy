@@ -90,7 +90,10 @@
     (let [db (d/db *conn*)
           eids (mapcat identity (q '[:find ?ref :where [_ :root/ref ?ref]] db))]
       (is (= (set maps)
-             (set (map (comp hydrate #(d/entity db %)) eids)))))))
+             (set (map (comp (partial into {})
+                             hydrate
+                             #(d/entity db %))
+                       eids)))))))
 
 ;;; perf:
 ;;; lein run :uri "datomic:mem://monocopy" :magic 5000 :iters 10
@@ -106,15 +109,17 @@
 (defn ^:perf map-insertion-perf [iters]
   (let [maps (take *magic* (randmaps scalars-seq))]
     (dotimed [_ iters]
-             (d/transact *conn* (mapcat root maps)))))
+      (d/transact *conn* (mapcat root maps)))))
 
 (defn ^:perf map-hydration-perf [iters]
   (let [maps (take *magic* (randmaps scalars-seq))]
     (d/transact *conn* (mapcat root maps))
     (let [db (d/db *conn*)]
       (dotimed [_ iters]
-               (let [eids (mapcat identity (q '[:find ?ref :where [_ :root/ref ?ref]] db))]
-                 (mapv (comp hydrate #(d/entity db %)) eids))))))
+        (let [eids (mapcat identity (q '[:find ?ref :where [_ :root/ref ?ref]] db))]
+          (mapv (comp (partial into {})
+                      hydrate
+                      #(d/entity db %)) eids))))))
 
 (defn benchf [magic uri iters f]
   (d/delete-database uri)
