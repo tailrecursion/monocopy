@@ -117,9 +117,7 @@
     (let [db (d/db *conn*)]
       (dotimed [_ iters]
         (let [eids (mapcat identity (q '[:find ?ref :where [_ :root/ref ?ref]] db))]
-          (mapv (comp (partial into {})
-                      hydrate
-                      #(d/entity db %)) eids))))))
+          (mapv (comp hydrate #(d/entity db %)) eids))))))
 
 (defn benchf [magic uri iters f]
   (d/delete-database uri)
