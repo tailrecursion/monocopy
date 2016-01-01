@@ -1,5 +1,7 @@
 # monocopy
 
+> WARNING monocopy uses the md5 hash of the printed value of collections as unique identifiers, so there is a possibility of hash collision and data loss.  This library best used for educational purposes only.  See Notes below for more info. 
+
 monocopy is a library and schema for efficiently storing many Clojure
 value types in a [Datomic](http://www.datomic.com/) database.
 
